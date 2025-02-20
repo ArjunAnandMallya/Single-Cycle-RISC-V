@@ -1,0 +1,299 @@
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 20.02.2025 22:40:44
+// Design Name: 
+// Module Name: Single_Cycle
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+//////////////////////////////////////////////////////////////////////////////////
+
+
+module Program_Counter(input clk,reset,input [31:0]PC_in, output reg [31:0] PC_out
+
+    );
+    always @(posedge clk , posedge reset)
+    begin
+    if (reset)
+    PC_out <= 32'b00;
+    else 
+    PC_out <= PC_in;
+    
+    
+    
+    end
+    
+    
+endmodule
+
+module PCplus4(input [31:0] fromPC, output [31:0] NextoPC);
+assign NextoPC = fromPC +4;
+endmodule
+
+module Instruction_Mem(input clk, reset, input [31:0] read_address, output [31:0] instruction_out);
+reg [31:0] I_Mem[63:0];
+integer k;
+assign instruction_out = I_Mem[read_address >>2 ];
+always@(posedge clk , posedge reset)begin
+    if (reset)begin
+        for( k=0; k< 64; k=k+1) begin
+        I_Mem[k] <= 32'b00;
+    end
+end
+else begin 
+       I_Mem[0]  = 32'b00000000000000000000000000000000; // nop
+        I_Mem[4]  = 32'b00000001100110001101101100110011; // add x13, x16, x25
+        I_Mem[8]  = 32'b01000000101100001101100110110011; // sub x5, x8, x3
+        I_Mem[12] = 32'b00000000001100010111100110110011; // and x1, x2, x3
+        I_Mem[16] = 32'b00000000010100110011000110110011; // or x4, x3, x5
+        I_Mem[20] = 32'b00000000101110101100010100010011; // addi x22, x21, 3
+        I_Mem[24] = 32'b00000000000101001010010010010011; // ori x9, x8, 1
+        I_Mem[28] = 32'b00000000111101011000000000100011; // sw x8, 15(x5)
+        I_Mem[32] = 32'b00000000011100011000001000000011; // lw x9, 3(x3)
+        I_Mem[36] = 32'b00000000111101111000001000100011; // sw x15, 12(x5)
+        I_Mem[40] = 32'b00000000011101110000001000000011; // lw x14, 10(x6)
+        I_Mem[44] = 32'h00948663; // beq x9, x9, 12
+end
+
+
+end
+endmodule
+
+module Reg_File(input clk, reset, RegWrite,input [4:0]Rs1,Rs2, Rd,input [31:0] Write_data, output [31:0] read_data1, read_data2);
+
+reg [31:0] Registers[31:0];
+initial begin
+    Registers[0] = 0;
+    Registers[1] = 4;
+    Registers[2] = 2;
+    Registers[3] = 24;
+    Registers[4] = 4;
+    Registers[5] = 1;
+    Registers[6] = 44;
+    Registers[7] = 4;
+    Registers[8] = 2;
+    Registers[9] = 1;
+    Registers[10] = 23;
+    Registers[11] = 4;
+    Registers[12] = 90;
+    Registers[13] = 10;
+    Registers[14] = 20;
+    Registers[15] = 30;
+    Registers[16] = 40;
+    Registers[17] = 50;
+    Registers[18] = 60;
+    Registers[19] = 70;
+    Registers[20] = 80;
+       Registers[21] = 80;
+    Registers[22] = 90;
+    Registers[23] = 70;
+    Registers[24] = 60;
+    Registers[25] = 65;
+    Registers[26] = 4;
+    Registers[27] = 32;
+    Registers[28] = 12;
+    Registers[29] = 34;
+    Registers[30] = 5;
+    Registers[31] = 10;
+    
+    
+    
+end
+
+integer k;
+always@ (posedge clk) begin
+   if (RegWrite) begin
+    Registers[Rd] <= Write_data;
+    end
+end
+
+assign read_data1 = Registers[Rs1];
+assign read_data2 = Registers[Rs2];
+endmodule
+
+
+module ImmGen(input [31:0]instruction ,input [6:0] Opcode, output reg [31:0]ImmExt );
+always @(*)begin
+    case (Opcode)
+    7'b0000011 :  ImmExt = {{ 20{instruction[31]}}, instruction[31:20]};
+    7'b01000011 :  ImmExt = {{ 20{instruction[31]}}, instruction[31:25], instruction[11:7]};
+    7'b01100011 : ImmExt = {{ 19{instruction[31]}}, instruction[31], instruction[30:25],instruction[11:8],1'b0};
+    endcase
+    
+end
+
+endmodule
+
+
+module Control_Unit(
+    input [6:0] instruction,
+    output reg Branch, MemtoReg, MemWrite, ALUSrc, RegWrite,
+    output reg [1:0] ALUOp
+);
+    always @(*) begin
+        case (instruction)
+            7'b0110011: {ALUSrc, MemtoReg, RegWrite, MemWrite, Branch, ALUOp} = 7'b0_0_1_0_0_10; // R-type
+            7'b0000011: {ALUSrc, MemtoReg, RegWrite, MemWrite, Branch, ALUOp} = 7'b1_1_1_0_0_00; // Load (I-type)
+            7'b0100011: {ALUSrc, MemtoReg, RegWrite, MemWrite, Branch, ALUOp} = 7'b1_0_0_1_0_00; // Store (S-type)
+            7'b1100011: {ALUSrc, MemtoReg, RegWrite, MemWrite, Branch, ALUOp} = 7'b0_0_0_0_1_01; // Branch (B-type)
+            default:    {ALUSrc, MemtoReg, RegWrite, MemWrite, Branch, ALUOp} = 7'b0_0_0_0_0_00;
+        endcase
+    end
+endmodule
+
+
+module ALU_unit (input [31:0]  A,B, input [3:0] Control_in, output reg [31:0] ALU_Result, output reg zero);
+
+always @ (Control_in or  A  or B) begin
+    case (Control_in) 
+    4'b0000 : begin zero <=0; ALU_Result <= A&B; end
+    4'b0001 : begin zero <=0; ALU_Result <= A|B; end
+    4'b0010 : begin zero <=0; ALU_Result <= A+B; end
+    4'b0110 : begin if (A==B) zero <=1; ALU_Result <= A-B; end
+    endcase
+             
+end
+
+
+
+endmodule
+
+module ALU_Control(input [1:0] ALUOp,input fun7, input [2:0] fun3, output reg [3:0] Control_out);
+
+always @(*) begin
+    case ({ALUOp,fun7, fun3})
+    6'b00_0000 : Control_out <= 4'b0010;
+    6'b01_0000 : Control_out <= 4'b0110;
+    6'b10_0000 : Control_out <= 4'b0010;
+    6'b10_1000 : Control_out <= 4'b0010;
+    6'b10_0111 : Control_out <= 4'b0000;
+    6'b10_0110 : Control_out <= 4'b0001;
+    endcase
+end
+
+
+endmodule
+
+module Data_Memory(
+    input clk, reset, MemWrite, MemRead, 
+    input [31:0] read_address, Write_data, 
+    output reg [31:0] Memdata_out // Changed to reg
+);
+
+reg [31:0] D_Memory[63:0]; // 64x32-bit memory
+integer k;
+
+always @(posedge clk or posedge reset) begin
+ if (MemWrite) begin
+        D_Memory[read_address>>2] <= Write_data; // Write data to memory
+    end
+end
+
+// Read logic
+always @(*) begin
+    if (MemRead) 
+        Memdata_out = D_Memory[read_address]; // Read from memory
+    else 
+        Memdata_out = 32'b00; // Default output when not reading
+end
+
+endmodule
+
+module Mux1(input sel1,input [31:0] A1,B1, output [31:0] Mux1_out) ;
+
+assign Mux1_out = (sel1==1'b0)? A1 :B1;
+
+endmodule
+
+module Mux2(input sel2, input [31:0] A2, B2, output [31:0] Mux2_out) ;
+assign Mux2_out = (sel2 == 1'b0)? A2 :B2;
+
+
+endmodule
+
+module Mux3(input sel3, input [31:0] A3, B3, output [31:0] Mux3_out) ;
+assign Mux3_out = (sel3 == 1'b0)? A3 :B3;
+
+
+endmodule
+
+
+module AND_logic (input branch, zero, output and_out);
+
+assign and_out = branch & zero;
+
+endmodule
+
+module Adder (input [31:0] in_1, in_2 , output [31:0] Sum_out );
+assign Sum_out = in_1 + in_2;
+
+endmodule 
+
+
+
+module top (input clk, input reset);
+
+
+    wire [31:0] PC_top,instruction_top, Rd1_top, Rd2_top, ImmExt_top,mux1_top , Sum_out_top, NextoPC_top,PC_in_top, address_top,Memdata_top,WriteBack_top;
+wire RegWrite_top, ALUSrc_top,branch_top,zero_top,sel2_top, MemtoReg_top, MemWrite_top, MemRead_top;
+wire [1:0] ALUOp_top;
+wire [3:0]control_top;
+Program_Counter PC(.clk(clk), .reset(reset) , .PC_in(PC_in_top), .PC_out(PC_top));
+
+PCplus4 PC_Adder(.fromPC(PC_top), .NextoPC( NextoPC_top));
+
+Instruction_Mem Inst_Memory (.clk(clk), .reset(reset), .read_address(PC_top),.instruction_out(instruction_top));
+
+Reg_File Reg_File(.clk(clk), .reset(reset), .RegWrite(RegWrite_top), .Rs1(instruction_top[19:15]), .Rs2(instruction_top[24:20]),.Rd(instruction_top[11:7]),.Write_data(WriteBack_top) ,.read_data1(Rd1_top),.read_data2(Rd2_top)); 
+
+ImmGen ImmGen(.Opcode(instruction_top[6:0]), .instruction(instruction_top[31:0]), .ImmExt(ImmExt_top));
+
+Control_Unit Control_Unit (.instruction(instruction_top[6:0]),.Branch(branch_top),.MemtoReg(MemtoReg_top),.ALUOp(ALUOp_top),.MemWrite(MemWrite_top), .ALUSrc(ALUSrc_top),.RegWrite(RegWrite_top));
+
+
+ALU_Control ALU_Control(.ALUOp(ALUOp_top), .fun7(instruction_top[30]), .fun3(instruction_top[14:12]), .Control_out(control_top));
+ALU_unit ALU(.A(Rd1_top),.B(mux1_top),.Control_in(control_top),.ALU_Result(address_top),.zero(zero_top));
+
+Mux1 ALU_mux(.sel1(ALUSrc_top), .A1(Rd2_top), .B1(ImmExt_top), .Mux1_out(mux1_top));
+
+Adder add(.in_1(PC_top),.in_2(ImmExt_top),.Sum_out(Sum_out_top));
+AND_logic AND(.branch(branch_top),.zero(zero_top),.and_out(sel2_top));
+
+Mux2 ADD(.sel2(sel2_top),.A2( NextoPC_top), .B2(Sum_out_top),.Mux2_out(PC_in_top)); 
+
+Data_Memory Data_mem(.clk(clk), .reset(reset), .MemWrite(MemWrite_top), .MemRead(MemRead_top),.read_address(address_top), .Write_data(Rd2_top), .Memdata_out(Memdata_top)); 
+
+Mux3 Memory_mux(.sel3(MemtoReg_top), .A3(address_top), .B3(Memdata_top), .Mux3_out(WriteBack_top));
+
+endmodule
+
+module tb_top();
+
+reg clk, reset;
+top uut(.clk(clk),.reset(reset));
+
+initial begin
+clk = 0;
+reset = 1;
+#5
+reset = 0;
+#400;
+end
+
+always begin
+#5 clk = ~clk;  
+end
+
+
+endmodule
